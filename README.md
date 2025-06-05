@@ -2,8 +2,6 @@
 
 DiziBomba, film ve dizi içeriklerini görüntülemek için geliştirilmiş modern bir web uygulamasıdır. [Next.js 15](https://nextjs.org) ve [React 19](https://react.dev) kullanılarak oluşturulmuştur.
 
-![DiziBomba Screenshot](https://via.placeholder.com/800x400?text=DiziBomba+Screenshot)
-
 ## Özellikler
 
 - Film ve dizi arşivi görüntüleme
@@ -38,7 +36,7 @@ DiziBomba, film ve dizi içeriklerini görüntülemek için geliştirilmiş mode
 1. Repoyu klonlayın:
 
 ```bash
-git clone https://github.com/yourusername/dizibomba.git
+git clone https://github.com/Ahmetshbzz/dizibomba.git
 cd dizibomba/dizibomba-app
 ```
 
