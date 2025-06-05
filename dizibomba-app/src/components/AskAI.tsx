@@ -5,7 +5,7 @@ import { getMovieDetails, getSeriesDetails } from "@/lib/tmdb";
 import { AnimatePresence, motion } from "framer-motion";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { FaFilm, FaInfoCircle, FaPaperPlane, FaRobot, FaTimes, FaTv } from "react-icons/fa";
+import { FaBrain, FaFilm, FaInfoCircle, FaPaperPlane, FaRobot, FaTimes, FaTv } from "react-icons/fa";
 
 // Sayfa bağlamı için tip tanımı
 interface ContentData {
@@ -43,6 +43,7 @@ const AskAI = () => {
     },
   ]);
   const [isLoading, setIsLoading] = useState(false);
+  const [thinkingDots, setThinkingDots] = useState<string>("");
   const [pageContext, setPageContext] = useState<PageContext>({
     type: null,
     id: null,
@@ -53,6 +54,7 @@ const AskAI = () => {
   const modalRef = useRef<HTMLDivElement>(null);
   const messageEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const thinkingTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   // Sayfa bağlamını algılama
   useEffect(() => {
@@ -126,6 +128,36 @@ const AskAI = () => {
     messageEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
+  // Düşünme animasyonu için kullanacağımız sayaç
+  useEffect(() => {
+    if (isLoading) {
+      // 300ms aralıkla nokta sayısını değiştir
+      thinkingTimerRef.current = setInterval(() => {
+        setThinkingDots(prev => {
+          if (prev === "...") return "";
+          else if (prev === "..") return "...";
+          else if (prev === ".") return "..";
+          else return ".";
+        });
+      }, 300);
+    } else {
+      // Yükleme bittiğinde zamanlayıcıyı temizle
+      if (thinkingTimerRef.current) {
+        clearInterval(thinkingTimerRef.current);
+        thinkingTimerRef.current = null;
+        setThinkingDots("");
+      }
+    }
+
+    // Component unmount olduğunda temizle
+    return () => {
+      if (thinkingTimerRef.current) {
+        clearInterval(thinkingTimerRef.current);
+        thinkingTimerRef.current = null;
+      }
+    };
+  }, [isLoading]);
+
   const toggleModal = () => {
     setIsModalOpen(!isModalOpen);
   };
@@ -168,14 +200,27 @@ const AskAI = () => {
     setInputMessage("");
     setIsLoading(true);
 
+    // Düşünme mesajını ekle (geçici)
+    const thinkingId = `thinking-${Date.now()}`;
+    setMessages((prev) => [...prev, {
+      id: thinkingId,
+      role: "model",
+      content: "Düşünüyor",
+      timestamp: new Date(),
+      isThinking: true
+    } as ChatMessage]);
+
     try {
       // Mesaj geçmişini API'nin beklediği formata dönüştür
-      const chatHistory = messages.map(msg => ({
-        role: msg.role,
-        content: msg.content,
-        id: msg.id,
-        timestamp: msg.timestamp
-      }));
+      // Düşünme mesajını hariç tut
+      const chatHistory = messages
+        .filter(msg => !('isThinking' in msg))
+        .map(msg => ({
+          role: msg.role,
+          content: msg.content,
+          id: msg.id,
+          timestamp: msg.timestamp
+        }));
 
       // Sayfa bağlamını ekleyerek daha doğru yanıtlar al
       let enhancedUserMessage = message;
@@ -204,6 +249,9 @@ const AskAI = () => {
       // API'ye gönder - doğrudan Gemini API'sine istek at
       const response = await sendDirectMessageToGemini(enhancedUserMessage, chatHistory);
 
+      // Düşünme mesajını kaldır
+      setMessages((prev) => prev.filter(msg => msg.id !== thinkingId));
+
       // AI yanıtını ekle
       const aiMessage: ChatMessage = {
         id: `model-${Date.now()}`,
@@ -215,6 +263,9 @@ const AskAI = () => {
       setMessages((prev) => [...prev, aiMessage]);
     } catch (error) {
       console.error("AI yanıt hatası:", error);
+
+      // Düşünme mesajını kaldır
+      setMessages((prev) => prev.filter(msg => msg.id !== thinkingId));
 
       // Hata mesajı ekle
       const errorMessage: ChatMessage = {
@@ -301,7 +352,11 @@ const AskAI = () => {
                     >
                       {message.role === "model" && (
                         <div className="bg-red-600 rounded-full p-1.5 mr-2 h-fit">
-                          <FaRobot className="text-white text-xs" />
+                          {'isThinking' in message ? (
+                            <FaBrain className="text-white text-xs animate-pulse" />
+                          ) : (
+                            <FaRobot className="text-white text-xs" />
+                          )}
                         </div>
                       )}
                       <div
@@ -311,26 +366,17 @@ const AskAI = () => {
                             : "bg-gray-800 text-gray-300"
                         }`}
                       >
-                        <p className="text-sm whitespace-pre-wrap">{message.content}</p>
+                        {'isThinking' in message ? (
+                          <div className="flex items-center">
+                            <span className="text-sm">Düşünüyor</span>
+                            <span className="text-sm ml-1">{thinkingDots}</span>
+                          </div>
+                        ) : (
+                          <p className="text-sm whitespace-pre-wrap">{message.content}</p>
+                        )}
                       </div>
                     </div>
                   ))}
-
-                  {/* Yazıyor animasyonu */}
-                  {isLoading && (
-                    <div className="flex justify-start">
-                      <div className="bg-red-600 rounded-full p-1.5 mr-2 h-fit">
-                        <FaRobot className="text-white text-xs" />
-                      </div>
-                      <div className="bg-gray-800 rounded-lg p-3">
-                        <div className="flex space-x-1">
-                          <div className="w-2 h-2 rounded-full bg-gray-500 animate-bounce" style={{ animationDelay: "0s" }}></div>
-                          <div className="w-2 h-2 rounded-full bg-gray-500 animate-bounce" style={{ animationDelay: "0.2s" }}></div>
-                          <div className="w-2 h-2 rounded-full bg-gray-500 animate-bounce" style={{ animationDelay: "0.4s" }}></div>
-                        </div>
-                      </div>
-                    </div>
-                  )}
 
                   {/* Mesaj sonuna otomatik kaydırma için referans */}
                   <div ref={messageEndRef} />
